@@ -1,30 +1,37 @@
 (() => {
-  if (window.__NETPRO_V2__) {
-    window.__NETPRO_V2__.toggle();
+  if (window.__NETPRO_V3__) {
+    window.__NETPRO_V3__.toggle();
     return;
   }
 
+  const TOP = window;
   const D = document;
-  const W = window;
 
   const state = {
     logs: [],
+    frames: [],
     selectedId: null,
     recording: true,
     filter: "all",
     query: "",
     seq: 0,
-    importedPerformance: false,
+    resourcesImported: false,
   };
 
+  const VERSION = "Network Pro V3";
+
+  function now() {
+    return new Date().toLocaleTimeString();
+  }
+
   function escapeHTML(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
       '"': "&quot;",
       "'": "&#39;",
-    }[char]));
+    }[ch]));
   }
 
   function truncate(value, max = 70000) {
@@ -46,25 +53,48 @@
       .replace(/(authorization\s*[:=]\s*["']?)(bearer\s+)?[^\s"'&,}]+/gi, "$1$2***MASKED***")
       .replace(/(cookie\s*[:=]\s*["']?)[^\n]+/gi, "$1***MASKED***")
       .replace(/((access_|refresh_)?token\s*[:=]\s*["']?)[^\s"'&,}]+/gi, "$1***MASKED***")
-      .replace(/(password\s*[:=]\s*["']?)[^\s"'&,}]+/gi, "$1***MASKED***");
+      .replace(/(password\s*[:=]\s*["']?)[^\s"'&,}]+/gi, "$1***MASKED***")
+      .replace(/(query_id\s*[:=]\s*["']?)[^\s"'&,}]+/gi, "$1***MASKED***")
+      .replace(/(hash\s*[:=]\s*["']?)[a-f0-9]{20,}/gi, "$1***MASKED***");
   }
 
-  function bodyToText(body) {
+  function safeConstructor(win, name) {
+    try {
+      return win[name];
+    } catch {
+      return null;
+    }
+  }
+
+  function bodyToText(body, win = window) {
     try {
       if (!body) return "";
-      if (typeof body === "string") return body;
-      if (body instanceof URLSearchParams) return body.toString();
 
-      if (body instanceof FormData) {
+      const URLSearchParamsCtor = safeConstructor(win, "URLSearchParams") || URLSearchParams;
+      const FormDataCtor = safeConstructor(win, "FormData") || FormData;
+      const FileCtor = safeConstructor(win, "File") || File;
+      const BlobCtor = safeConstructor(win, "Blob") || Blob;
+      const ArrayBufferCtor = safeConstructor(win, "ArrayBuffer") || ArrayBuffer;
+
+      if (typeof body === "string") return body;
+      if (body instanceof URLSearchParamsCtor) return body.toString();
+
+      if (body instanceof FormDataCtor) {
         const arr = [];
         body.forEach((value, key) => {
-          arr.push(key + "=" + (value instanceof File ? "[File:" + value.name + "]" : value));
+          arr.push(key + "=" + (value instanceof FileCtor ? "[File:" + value.name + "]" : value));
         });
         return arr.join("&");
       }
 
-      if (body instanceof Blob) return "[Blob " + body.type + " " + body.size + " bytes]";
-      if (body instanceof ArrayBuffer) return "[ArrayBuffer " + body.byteLength + " bytes]";
+      if (body instanceof BlobCtor) {
+        return "[Blob " + body.type + " " + body.size + " bytes]";
+      }
+
+      if (body instanceof ArrayBufferCtor) {
+        return "[ArrayBuffer " + body.byteLength + " bytes]";
+      }
+
       return JSON.stringify(body);
     } catch {
       return "[unreadable body]";
@@ -90,7 +120,6 @@
         });
       }
     } catch {}
-
     return output;
   }
 
@@ -114,16 +143,6 @@
     return output;
   }
 
-  function copyText(text) {
-    try {
-      navigator.clipboard.writeText(text);
-      toast("Copied");
-    } catch {
-      console.log(text);
-      toast("Copy gagal, cek console");
-    }
-  }
-
   function toast(text) {
     let el = D.getElementById("npToast");
     if (!el) {
@@ -139,14 +158,23 @@
     }, 1400);
   }
 
+  function copyText(text) {
+    try {
+      navigator.clipboard.writeText(text);
+      toast("Copied");
+    } catch {
+      console.log(text);
+      toast("Copy gagal, cek console");
+    }
+  }
+
   function injectStyle() {
-    const old = D.getElementById("npStyle");
-    if (old) old.remove();
+    D.getElementById("npStyle")?.remove();
 
     const style = D.createElement("style");
     style.id = "npStyle";
     style.textContent = `
-      #npFloat, #npPanel, #npPanel * , #npToast {
+      #npFloat, #npPanel, #npPanel *, #npToast {
         box-sizing: border-box !important;
         font-family: Arial, sans-serif !important;
       }
@@ -156,14 +184,14 @@
         right: 12px !important;
         bottom: 14px !important;
         z-index: 2147483647 !important;
-        width: 56px !important;
-        height: 56px !important;
+        width: 58px !important;
+        height: 58px !important;
         border-radius: 999px !important;
         border: 1px solid #475569 !important;
         background: #0f172a !important;
         color: #ffffff !important;
         font-size: 13px !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
         box-shadow: 0 10px 28px rgba(0,0,0,.45) !important;
       }
 
@@ -171,7 +199,7 @@
         position: fixed !important;
         left: 8px !important;
         right: 8px !important;
-        bottom: 78px !important;
+        bottom: 82px !important;
         height: 74vh !important;
         z-index: 2147483646 !important;
         display: none;
@@ -195,11 +223,11 @@
       }
 
       .np-title {
-        min-width: 90px !important;
-        font-size: 13px !important;
-        font-weight: 800 !important;
+        min-width: 92px !important;
+        font-size: 12px !important;
+        font-weight: 900 !important;
         color: #fff !important;
-        line-height: 1.1 !important;
+        line-height: 1.15 !important;
       }
 
       .np-btn {
@@ -209,7 +237,7 @@
         background: #1e293b !important;
         color: #e5e7eb !important;
         font-size: 12px !important;
-        font-weight: 700 !important;
+        font-weight: 800 !important;
       }
 
       .np-btn.active {
@@ -240,9 +268,9 @@
       }
 
       #npBody {
-        height: calc(74vh - 101px) !important;
+        height: calc(74vh - 103px) !important;
         display: grid !important;
-        grid-template-rows: 42% 58% !important;
+        grid-template-rows: 43% 57% !important;
       }
 
       #npList {
@@ -286,6 +314,13 @@
         margin-top: 4px !important;
         color: #94a3b8 !important;
         font-size: 11px !important;
+      }
+
+      .np-empty {
+        padding: 14px !important;
+        color: #94a3b8 !important;
+        font-size: 13px !important;
+        line-height: 1.45 !important;
       }
 
       .np-detail-wrap {
@@ -333,20 +368,13 @@
         padding: 9px !important;
         background: #0f172a !important;
         color: #fff !important;
-        font-weight: 700 !important;
-      }
-
-      .np-empty {
-        padding: 14px !important;
-        color: #94a3b8 !important;
-        font-size: 13px !important;
-        line-height: 1.45 !important;
+        font-weight: 800 !important;
       }
 
       .np-toast {
         position: fixed !important;
         left: 50% !important;
-        bottom: 84px !important;
+        bottom: 88px !important;
         transform: translateX(-50%) !important;
         z-index: 2147483647 !important;
         display: none;
@@ -370,11 +398,15 @@
         }
       }
     `;
+
     D.documentElement.appendChild(style);
   }
 
   function createUI() {
     injectStyle();
+
+    D.getElementById("npFloat")?.remove();
+    D.getElementById("npPanel")?.remove();
 
     const button = D.createElement("button");
     button.id = "npFloat";
@@ -385,20 +417,21 @@
     panel.id = "npPanel";
     panel.innerHTML = `
       <div class="np-top">
-        <div class="np-title">Network<br>Pro</div>
+        <div class="np-title">Network<br>Pro V3</div>
         <button class="np-btn rec" id="npRec">REC</button>
         <button class="np-btn active" id="npAll">All</button>
         <button class="np-btn" id="npFetch">Fetch</button>
         <button class="np-btn" id="npXHR">XHR</button>
         <button class="np-btn" id="npWS">WS</button>
-        <button class="np-btn" id="npPerf">Resources</button>
+        <button class="np-btn" id="npFrames">Frames</button>
+        <button class="np-btn" id="npResources">Resources</button>
         <button class="np-btn" id="npErr">Err</button>
         <button class="np-btn" id="npClear">Clear</button>
         <button class="np-btn" id="npClose">×</button>
       </div>
 
       <div class="np-search">
-        <input id="npQuery" placeholder="filter url/status/method/type">
+        <input id="npQuery" placeholder="filter url/status/method/type/frame">
       </div>
 
       <div id="npBody">
@@ -426,6 +459,7 @@
     D.getElementById("npClear").onclick = () => {
       state.logs = [];
       state.selectedId = null;
+      state.resourcesImported = false;
       render();
     };
 
@@ -437,17 +471,31 @@
     D.getElementById("npAll").onclick = () => setFilter("all");
     D.getElementById("npFetch").onclick = () => setFilter("fetch");
     D.getElementById("npXHR").onclick = () => setFilter("xhr");
-    D.getElementById("npWS").onclick = () => setFilter("ws");
-    D.getElementById("npPerf").onclick = () => {
-      importPerformanceEntries();
+    D.getElementById("npWS").onclick = () => setFilter("websocket");
+    D.getElementById("npErr").onclick = () => setFilter("err");
+
+    D.getElementById("npResources").onclick = () => {
+      importPerformanceEntries(TOP, "top");
       setFilter("resource");
     };
-    D.getElementById("npErr").onclick = () => setFilter("err");
+
+    D.getElementById("npFrames").onclick = () => {
+      scanFrames();
+      setFilter("frame");
+    };
 
     panel.addEventListener("click", (event) => {
       const log = state.logs.find((item) => item.id === state.selectedId);
       if (!log) return;
 
+      if (event.target.id === "npCopyURL") copyText(log.url || "");
+      if (event.target.id === "npOpenURL") {
+        try {
+          TOP.open(log.url, "_blank");
+        } catch {
+          toast("Gagal open URL");
+        }
+      }
       if (event.target.id === "npCopyRaw") copyText(mask(JSON.stringify(log, null, 2)));
       if (event.target.id === "npCopyResponse") copyText(mask(log.response || ""));
       if (event.target.id === "npCopyPayload") copyText(mask(log.payload || ""));
@@ -455,6 +503,7 @@
     });
 
     panel.style.display = "block";
+
     return { button, panel };
   }
 
@@ -468,8 +517,9 @@
       all: "npAll",
       fetch: "npFetch",
       xhr: "npXHR",
-      ws: "npWS",
-      resource: "npPerf",
+      websocket: "npWS",
+      frame: "npFrames",
+      resource: "npResources",
       err: "npErr",
     };
 
@@ -484,24 +534,27 @@
   }
 
   function statusOK(status) {
-    return String(status).startsWith("2") || String(status).startsWith("3") || String(status) === "loaded";
+    const s = String(status);
+    return s.startsWith("2") || s.startsWith("3") || s === "loaded" || s === "open" || s === "accessible";
   }
 
   function matchLog(log) {
     if (state.filter === "fetch" && log.type !== "fetch") return false;
     if (state.filter === "xhr" && log.type !== "xhr") return false;
-    if (state.filter === "ws" && log.type !== "websocket") return false;
+    if (state.filter === "websocket" && log.type !== "websocket") return false;
+    if (state.filter === "frame" && log.type !== "frame") return false;
     if (state.filter === "resource" && log.type !== "resource" && log.type !== "navigation") return false;
 
     if (state.filter === "err") {
       const s = String(log.status);
-      if (!(s.startsWith("4") || s.startsWith("5") || s === "ERR" || s === "error")) return false;
+      if (!(s.startsWith("4") || s.startsWith("5") || s === "ERR" || s === "error" || s === "cross-origin")) return false;
     }
 
     const q = state.query.toLowerCase().trim();
     if (!q) return true;
 
     return [
+      log.context,
       log.url,
       log.method,
       log.status,
@@ -523,10 +576,11 @@
       list.innerHTML = `
         <div class="np-empty">
           Belum ada request untuk filter ini.<br><br>
-          Tips:<br>
-          1. Tekan <b>All</b>.<br>
-          2. Klik tombol/fitur web setelah tool aktif.<br>
-          3. Tekan <b>Resources</b> untuk lihat file yang sudah dimuat halaman.
+          Tips Telegram:<br>
+          1. Tekan <b>Frames</b> untuk cari URL Mini App.<br>
+          2. Kalau frame cross-origin, copy/open URL-nya langsung di Chrome.<br>
+          3. Jalankan NET lagi di URL asli Mini App.<br>
+          4. Baru klik fitur claim/login/task.
         </div>
       `;
     } else {
@@ -542,8 +596,14 @@
               <span>${escapeHTML(log.method || "-")}</span>
               <span style="margin-left:auto;color:#94a3b8">${escapeHTML(log.ms ?? 0)}ms</span>
             </div>
-            <div class="np-url">${escapeHTML(log.url)}</div>
-            <div class="np-meta">${escapeHTML(log.type)}${log.initiatorType ? " • " + escapeHTML(log.initiatorType) : ""} • ${escapeHTML(log.time)} • ${escapeHTML(log.size ?? 0)}b</div>
+            <div class="np-url">${escapeHTML(log.url || "(no url)")}</div>
+            <div class="np-meta">
+              ${escapeHTML(log.type)}
+              ${log.context ? " • " + escapeHTML(log.context) : ""}
+              ${log.initiatorType ? " • " + escapeHTML(log.initiatorType) : ""}
+              • ${escapeHTML(log.time)}
+              • ${escapeHTML(log.size ?? 0)}b
+            </div>
           </div>
         `;
       }).join("");
@@ -561,8 +621,8 @@
     if (!selected) {
       detail.innerHTML = `
         <div class="np-empty">
-          Pilih request untuk lihat detail.<br><br>
-          Untuk API detail lengkap, request harus terjadi setelah Network Pro aktif.
+          Pilih request/frame/resource untuk lihat detail.<br><br>
+          Untuk bot Python, cari tipe <b>fetch</b>, <b>xhr</b>, atau <b>websocket</b>. Resource biasa tidak cukup.
         </div>
       `;
       return;
@@ -592,7 +652,9 @@
   }
 
   function createDetail(log) {
-    const general = `URL: ${log.url}
+    const general = `Version: ${VERSION}
+Context: ${log.context || "-"}
+URL: ${log.url || "-"}
 Method: ${log.method || "-"}
 Status: ${log.status}
 Type: ${log.type}
@@ -604,6 +666,8 @@ Size: ${log.size ?? 0} bytes`;
     return `
       <div class="np-detail-wrap">
         <div class="np-copy-row">
+          <button class="np-btn" id="npCopyURL">Copy URL</button>
+          <button class="np-btn" id="npOpenURL">Open URL</button>
           <button class="np-btn" id="npCopyRaw">Copy Raw</button>
           <button class="np-btn" id="npCopyResponse">Copy Response</button>
           <button class="np-btn" id="npCopyPayload">Copy Payload</button>
@@ -629,7 +693,7 @@ Size: ${log.size ?? 0} bytes`;
         </details>
 
         <details open>
-          <summary>Response</summary>
+          <summary>Response / Notes</summary>
           <pre>${escapeHTML(mask(pretty(log.response || "(empty/cannot read)")))}</pre>
         </details>
 
@@ -642,18 +706,18 @@ Size: ${log.size ?? 0} bytes`;
   }
 
   function addLog(log) {
-    if (!state.recording && log.type !== "resource" && log.type !== "navigation") return;
+    if (!state.recording && !["resource", "navigation", "frame"].includes(log.type)) return;
 
     log.id = ++state.seq;
-    log.time = new Date().toLocaleTimeString();
+    log.time = now();
     log.size = log.size ?? String(log.response || "").length;
 
     state.logs.push(log);
-    W.__API_LOGS__ = state.logs;
+    TOP.__API_LOGS__ = state.logs;
     state.selectedId = log.id;
 
     try {
-      console.groupCollapsed("🌐 " + log.type + " " + (log.method || "-") + " " + log.status + " " + log.url);
+      console.groupCollapsed("🌐 " + log.type + " " + (log.method || "-") + " " + log.status + " " + (log.url || ""));
       console.log(log);
       console.groupEnd();
     } catch {}
@@ -661,36 +725,34 @@ Size: ${log.size ?? 0} bytes`;
     render();
   }
 
-  function importPerformanceEntries() {
-    if (state.importedPerformance) {
-      toast("Resources sudah di-import");
-      return;
-    }
-
-    state.importedPerformance = true;
-
+  function importPerformanceEntries(win = TOP, context = "top") {
     try {
-      const nav = performance.getEntriesByType("navigation")[0];
+      const perf = win.performance;
+      if (!perf) return;
+
+      const nav = perf.getEntriesByType("navigation")[0];
 
       if (nav) {
         addLog({
           type: "navigation",
+          context,
           initiatorType: "document",
-          url: location.href,
+          url: win.location.href,
           method: "GET",
           status: "loaded",
           ms: Math.round(nav.duration || 0),
           reqHeaders: {},
           resHeaders: {},
           payload: "",
-          response: "Navigation entry only. Headers/response tidak tersedia karena terjadi sebelum tool aktif.",
+          response: "Navigation entry only. Header/body tidak tersedia karena request terjadi sebelum Network Pro aktif.",
           size: Math.round(nav.transferSize || nav.encodedBodySize || 0),
         });
       }
 
-      performance.getEntriesByType("resource").forEach((entry) => {
+      perf.getEntriesByType("resource").forEach((entry) => {
         addLog({
           type: "resource",
+          context,
           initiatorType: entry.initiatorType || "resource",
           url: entry.name,
           method: "GET",
@@ -699,285 +761,395 @@ Size: ${log.size ?? 0} bytes`;
           reqHeaders: {},
           resHeaders: {},
           payload: "",
-          response: "Performance resource entry only. Headers/response body tidak tersedia.",
+          response: "Performance resource entry only. Header/body tidak tersedia.",
           size: Math.round(entry.transferSize || entry.encodedBodySize || 0),
         });
       });
 
-      toast("Resources di-import");
+      toast("Resources imported");
     } catch (error) {
-      toast("Gagal import resources");
       console.error(error);
+      toast("Gagal import resources");
     }
   }
 
-  function hookFetch() {
-    const originalFetch = W.fetch;
+  function hookWindow(win, context = "top") {
+    try {
+      if (!win || win.__NETPRO_V3_HOOKED__) return;
+      win.__NETPRO_V3_HOOKED__ = true;
+    } catch {
+      return;
+    }
 
-    if (!originalFetch || originalFetch.__netproV2Hooked) return;
+    hookFetch(win, context);
+    hookXHR(win, context);
+    hookBeacon(win, context);
+    hookWebSocket(win, context);
+  }
 
-    W.fetch = async function (input, init = {}) {
-      const startedAt = performance.now();
+  function hookFetch(win, context) {
+    try {
+      const originalFetch = win.fetch;
+      const RequestCtor = safeConstructor(win, "Request");
 
-      let url = "";
-      let method = "GET";
-      let payload = "";
-      let reqHeaders = {};
+      if (!originalFetch || originalFetch.__netproV3Hooked) return;
 
-      try {
-        if (input instanceof Request) {
-          url = input.url;
-          method = input.method || "GET";
-          reqHeaders = headersToObject(input.headers);
-        } else {
-          url = String(input);
-        }
+      win.fetch = async function (input, init = {}) {
+        const startedAt = performance.now();
 
-        if (init && init.method) method = init.method;
-
-        if (init && init.headers) {
-          reqHeaders = {
-            ...reqHeaders,
-            ...headersToObject(init.headers),
-          };
-        }
-
-        if (init && init.body) payload = bodyToText(init.body);
-      } catch {}
-
-      try {
-        const response = await originalFetch.apply(this, arguments);
-
-        let responseText = "";
+        let url = "";
+        let method = "GET";
+        let payload = "";
+        let reqHeaders = {};
 
         try {
-          responseText = truncate(await response.clone().text());
-        } catch (error) {
-          responseText = "[unreadable response: " + error.message + "]";
-        }
+          if (RequestCtor && input instanceof RequestCtor) {
+            url = input.url;
+            method = input.method || "GET";
+            reqHeaders = headersToObject(input.headers);
+          } else {
+            url = String(input);
+          }
 
-        addLog({
-          type: "fetch",
-          initiatorType: "fetch",
-          url,
-          method,
-          status: response.status,
-          ms: Math.round(performance.now() - startedAt),
-          reqHeaders,
-          resHeaders: headersToObject(response.headers),
-          payload,
-          response: responseText,
+          if (init && init.method) method = init.method;
+
+          if (init && init.headers) {
+            reqHeaders = {
+              ...reqHeaders,
+              ...headersToObject(init.headers),
+            };
+          }
+
+          if (init && init.body) payload = bodyToText(init.body, win);
+        } catch {}
+
+        try {
+          const response = await originalFetch.apply(this, arguments);
+
+          let responseText = "";
+
+          try {
+            responseText = truncate(await response.clone().text());
+          } catch (error) {
+            responseText = "[unreadable response: " + error.message + "]";
+          }
+
+          addLog({
+            type: "fetch",
+            context,
+            initiatorType: "fetch",
+            url,
+            method,
+            status: response.status,
+            ms: Math.round(performance.now() - startedAt),
+            reqHeaders,
+            resHeaders: headersToObject(response.headers),
+            payload,
+            response: responseText,
+          });
+
+          return response;
+        } catch (error) {
+          addLog({
+            type: "fetch",
+            context,
+            initiatorType: "fetch",
+            url,
+            method,
+            status: "ERR",
+            ms: Math.round(performance.now() - startedAt),
+            reqHeaders,
+            resHeaders: {},
+            payload,
+            response: String(error),
+          });
+
+          throw error;
+        }
+      };
+
+      win.fetch.__netproV3Hooked = true;
+    } catch {}
+  }
+
+  function hookXHR(win, context) {
+    try {
+      const XHR = win.XMLHttpRequest;
+      if (!XHR || XHR.prototype.__netproV3Hooked) return;
+
+      const originalOpen = XHR.prototype.open;
+      const originalSend = XHR.prototype.send;
+      const originalSetRequestHeader = XHR.prototype.setRequestHeader;
+
+      XHR.prototype.open = function (method, url) {
+        this.__npMethod = method;
+        this.__npUrl = url;
+        this.__npHeaders = {};
+        return originalOpen.apply(this, arguments);
+      };
+
+      XHR.prototype.setRequestHeader = function (key, value) {
+        this.__npHeaders = this.__npHeaders || {};
+        this.__npHeaders[key] = value;
+        return originalSetRequestHeader.apply(this, arguments);
+      };
+
+      XHR.prototype.send = function (body) {
+        const xhr = this;
+        const startedAt = performance.now();
+        const payload = bodyToText(body, win);
+
+        xhr.addEventListener("loadend", () => {
+          let responseText = "";
+
+          try {
+            responseText = truncate(xhr.responseText);
+          } catch {
+            responseText = "[unreadable xhr response]";
+          }
+
+          addLog({
+            type: "xhr",
+            context,
+            initiatorType: "xhr",
+            url: xhr.__npUrl,
+            method: xhr.__npMethod,
+            status: xhr.status,
+            ms: Math.round(performance.now() - startedAt),
+            reqHeaders: xhr.__npHeaders || {},
+            resHeaders: parseXHRHeaders(xhr.getAllResponseHeaders()),
+            payload,
+            response: responseText,
+          });
         });
 
-        return response;
-      } catch (error) {
+        return originalSend.apply(this, arguments);
+      };
+
+      XHR.prototype.__netproV3Hooked = true;
+    } catch {}
+  }
+
+  function hookBeacon(win, context) {
+    try {
+      if (!win.navigator || !win.navigator.sendBeacon || win.navigator.sendBeacon.__netproV3Hooked) return;
+
+      const originalBeacon = win.navigator.sendBeacon.bind(win.navigator);
+
+      win.navigator.sendBeacon = function (url, data) {
+        const payload = bodyToText(data, win);
+        const ok = originalBeacon(url, data);
+
         addLog({
           type: "fetch",
-          initiatorType: "fetch",
-          url,
-          method,
-          status: "ERR",
-          ms: Math.round(performance.now() - startedAt),
-          reqHeaders,
+          context,
+          initiatorType: "sendBeacon",
+          url: String(url),
+          method: "BEACON",
+          status: ok ? "queued" : "failed",
+          ms: 0,
+          reqHeaders: {},
           resHeaders: {},
           payload,
-          response: String(error),
+          response: "sendBeacon tidak mengekspos response body.",
         });
 
-        throw error;
-      }
-    };
+        return ok;
+      };
 
-    W.fetch.__netproV2Hooked = true;
+      win.navigator.sendBeacon.__netproV3Hooked = true;
+    } catch {}
   }
 
-  function hookXHR() {
-    if (XMLHttpRequest.prototype.__netproV2Hooked) return;
+  function hookWebSocket(win, context) {
+    try {
+      if (!win.WebSocket || win.WebSocket.__netproV3Hooked) return;
 
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
-    const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+      const NativeWebSocket = win.WebSocket;
 
-    XMLHttpRequest.prototype.open = function (method, url) {
-      this.__npMethod = method;
-      this.__npUrl = url;
-      this.__npHeaders = {};
-      return originalOpen.apply(this, arguments);
-    };
-
-    XMLHttpRequest.prototype.setRequestHeader = function (key, value) {
-      this.__npHeaders = this.__npHeaders || {};
-      this.__npHeaders[key] = value;
-      return originalSetRequestHeader.apply(this, arguments);
-    };
-
-    XMLHttpRequest.prototype.send = function (body) {
-      const xhr = this;
-      const startedAt = performance.now();
-      const payload = bodyToText(body);
-
-      xhr.addEventListener("loadend", () => {
-        let responseText = "";
-
-        try {
-          responseText = truncate(xhr.responseText);
-        } catch {
-          responseText = "[unreadable xhr response]";
-        }
+      function WrappedWebSocket(url, protocols) {
+        const ws = protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+        const startedAt = performance.now();
 
         addLog({
-          type: "xhr",
-          initiatorType: "xhr",
-          url: xhr.__npUrl,
-          method: xhr.__npMethod,
-          status: xhr.status,
-          ms: Math.round(performance.now() - startedAt),
-          reqHeaders: xhr.__npHeaders || {},
-          resHeaders: parseXHRHeaders(xhr.getAllResponseHeaders()),
-          payload,
-          response: responseText,
+          type: "websocket",
+          context,
+          initiatorType: "websocket",
+          url: String(url),
+          method: "WS",
+          status: "connecting",
+          ms: 0,
+          reqHeaders: {},
+          resHeaders: {},
+          payload: "",
+          response: "WebSocket created.",
         });
-      });
 
-      return originalSend.apply(this, arguments);
-    };
+        ws.addEventListener("open", () => {
+          addLog({
+            type: "websocket",
+            context,
+            initiatorType: "websocket",
+            url: String(url),
+            method: "WS",
+            status: "open",
+            ms: Math.round(performance.now() - startedAt),
+            reqHeaders: {},
+            resHeaders: {},
+            payload: "",
+            response: "WebSocket opened.",
+          });
+        });
 
-    XMLHttpRequest.prototype.__netproV2Hooked = true;
+        ws.addEventListener("message", (event) => {
+          addLog({
+            type: "websocket",
+            context,
+            initiatorType: "websocket",
+            url: String(url),
+            method: "WS",
+            status: "message",
+            ms: 0,
+            reqHeaders: {},
+            resHeaders: {},
+            payload: "",
+            response: truncate(typeof event.data === "string" ? event.data : "[binary websocket message]"),
+          });
+        });
+
+        ws.addEventListener("close", () => {
+          addLog({
+            type: "websocket",
+            context,
+            initiatorType: "websocket",
+            url: String(url),
+            method: "WS",
+            status: "closed",
+            ms: 0,
+            reqHeaders: {},
+            resHeaders: {},
+            payload: "",
+            response: "WebSocket closed.",
+          });
+        });
+
+        const nativeSend = ws.send;
+        ws.send = function (data) {
+          addLog({
+            type: "websocket",
+            context,
+            initiatorType: "websocket",
+            url: String(url),
+            method: "WS SEND",
+            status: "sent",
+            ms: 0,
+            reqHeaders: {},
+            resHeaders: {},
+            payload: bodyToText(data, win),
+            response: "",
+          });
+
+          return nativeSend.apply(ws, arguments);
+        };
+
+        return ws;
+      }
+
+      WrappedWebSocket.prototype = NativeWebSocket.prototype;
+      WrappedWebSocket.CONNECTING = NativeWebSocket.CONNECTING;
+      WrappedWebSocket.OPEN = NativeWebSocket.OPEN;
+      WrappedWebSocket.CLOSING = NativeWebSocket.CLOSING;
+      WrappedWebSocket.CLOSED = NativeWebSocket.CLOSED;
+
+      win.WebSocket = WrappedWebSocket;
+      win.WebSocket.__netproV3Hooked = true;
+    } catch {}
   }
 
-  function hookBeacon() {
-    if (!navigator.sendBeacon || navigator.sendBeacon.__netproV2Hooked) return;
+  function scanFrames() {
+    state.logs = state.logs.filter((log) => log.type !== "frame");
+    state.frames = [];
 
-    const originalBeacon = navigator.sendBeacon.bind(navigator);
+    const frames = [...D.querySelectorAll("iframe, webview")];
 
-    navigator.sendBeacon = function (url, data) {
-      const payload = bodyToText(data);
-      const ok = originalBeacon(url, data);
-
+    if (!frames.length) {
       addLog({
-        type: "fetch",
-        initiatorType: "sendBeacon",
-        url: String(url),
-        method: "BEACON",
-        status: ok ? "queued" : "failed",
-        ms: 0,
-        reqHeaders: {},
-        resHeaders: {},
-        payload,
-        response: "sendBeacon does not expose response body.",
-      });
-
-      return ok;
-    };
-
-    navigator.sendBeacon.__netproV2Hooked = true;
-  }
-
-  function hookWebSocket() {
-    if (!W.WebSocket || W.WebSocket.__netproV2Hooked) return;
-
-    const NativeWebSocket = W.WebSocket;
-
-    function WrappedWebSocket(url, protocols) {
-      const ws = protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
-      const startedAt = performance.now();
-
-      addLog({
-        type: "websocket",
-        initiatorType: "websocket",
-        url: String(url),
-        method: "WS",
-        status: "connecting",
+        type: "frame",
+        context: "top",
+        initiatorType: "frame-scan",
+        url: location.href,
+        method: "SCAN",
+        status: "none",
         ms: 0,
         reqHeaders: {},
         resHeaders: {},
         payload: "",
-        response: "WebSocket created.",
+        response: "Tidak ada iframe/webview yang terlihat dari halaman ini.",
       });
-
-      ws.addEventListener("open", () => {
-        addLog({
-          type: "websocket",
-          initiatorType: "websocket",
-          url: String(url),
-          method: "WS",
-          status: "open",
-          ms: Math.round(performance.now() - startedAt),
-          reqHeaders: {},
-          resHeaders: {},
-          payload: "",
-          response: "WebSocket opened.",
-        });
-      });
-
-      ws.addEventListener("message", (event) => {
-        addLog({
-          type: "websocket",
-          initiatorType: "websocket",
-          url: String(url),
-          method: "WS",
-          status: "message",
-          ms: 0,
-          reqHeaders: {},
-          resHeaders: {},
-          payload: "",
-          response: truncate(typeof event.data === "string" ? event.data : "[binary websocket message]"),
-        });
-      });
-
-      ws.addEventListener("close", () => {
-        addLog({
-          type: "websocket",
-          initiatorType: "websocket",
-          url: String(url),
-          method: "WS",
-          status: "closed",
-          ms: 0,
-          reqHeaders: {},
-          resHeaders: {},
-          payload: "",
-          response: "WebSocket closed.",
-        });
-      });
-
-      const nativeSend = ws.send;
-      ws.send = function (data) {
-        addLog({
-          type: "websocket",
-          initiatorType: "websocket",
-          url: String(url),
-          method: "WS SEND",
-          status: "sent",
-          ms: 0,
-          reqHeaders: {},
-          resHeaders: {},
-          payload: bodyToText(data),
-          response: "",
-        });
-
-        return nativeSend.apply(ws, arguments);
-      };
-
-      return ws;
+      return;
     }
 
-    WrappedWebSocket.prototype = NativeWebSocket.prototype;
-    WrappedWebSocket.CONNECTING = NativeWebSocket.CONNECTING;
-    WrappedWebSocket.OPEN = NativeWebSocket.OPEN;
-    WrappedWebSocket.CLOSING = NativeWebSocket.CLOSING;
-    WrappedWebSocket.CLOSED = NativeWebSocket.CLOSED;
-    W.WebSocket = WrappedWebSocket;
-    W.WebSocket.__netproV2Hooked = true;
+    frames.forEach((frame, index) => {
+      let src = frame.src || frame.getAttribute("src") || "";
+      let accessible = false;
+      let realLocation = "";
+      let note = "";
+
+      try {
+        if (frame.contentWindow) {
+          realLocation = frame.contentWindow.location.href;
+          accessible = true;
+          hookWindow(frame.contentWindow, "frame#" + index);
+          try {
+            importPerformanceEntries(frame.contentWindow, "frame#" + index);
+          } catch {}
+          note = "Frame bisa diakses. Hook fetch/xhr/ws sudah dipasang ke frame ini.";
+        }
+      } catch (error) {
+        accessible = false;
+        note =
+          "Frame cross-origin/sandbox. Browser tidak mengizinkan script top page masuk ke frame ini. Copy/Open URL frame lalu jalankan NET langsung di URL tersebut.";
+      }
+
+      const url = realLocation || src || "(no src)";
+
+      state.frames.push({
+        index,
+        tag: frame.tagName,
+        url,
+        accessible,
+      });
+
+      addLog({
+        type: "frame",
+        context: "top",
+        initiatorType: "frame-scan",
+        url,
+        method: "FRAME",
+        status: accessible ? "accessible" : "cross-origin",
+        ms: 0,
+        reqHeaders: {},
+        resHeaders: {},
+        payload: "",
+        response:
+          "Index: " + index +
+          "\nTag: " + frame.tagName +
+          "\nAccessible: " + accessible +
+          "\nURL: " + url +
+          "\n\n" + note,
+      });
+    });
+
+    toast("Frames scanned");
   }
 
   const ui = createUI();
 
-  hookFetch();
-  hookXHR();
-  hookBeacon();
-  hookWebSocket();
+  hookWindow(TOP, "top");
+  importPerformanceEntries(TOP, "top");
+  scanFrames();
 
-  W.__NETPRO_V2__ = {
+  TOP.__NETPRO_V3__ = {
     toggle: () => ui.button.click(),
     open: () => {
       ui.panel.style.display = "block";
@@ -986,11 +1158,12 @@ Size: ${log.size ?? 0} bytes`;
     close: () => {
       ui.panel.style.display = "none";
     },
-    importResources: importPerformanceEntries,
+    scanFrames,
+    importResources: () => importPerformanceEntries(TOP, "top"),
     state,
+    version: VERSION,
   };
 
-  importPerformanceEntries();
   render();
-  toast("Network Pro aktif");
+  toast("Network Pro V3 aktif");
 })();
