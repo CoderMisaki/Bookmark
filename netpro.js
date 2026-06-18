@@ -1,33 +1,625 @@
-javascript:(()=>{
-  if(window.__NETPRO__){window.__NETPRO__.toggle();return;}
-  const D=document,W=window;
-  const ST={logs:[],sel:null,rec:true,filter:'all',q:'',seq:0};
-  const CSS='all:initial;box-sizing:border-box;font-family:Arial,sans-serif;color:#e9eef5;';
-  function E(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
-  function C(t,n=60000){t=String(t??'');return t.length>n?t.slice(0,n)+'\n...[TRUNCATED '+(t.length-n)+' chars]':t;}
-  function P(t){try{return JSON.stringify(JSON.parse(t),null,2)}catch(e){return t??''}}
-  function M(s){return String(s??'').replace(/(authorization\s*[:=]\s*["']?)(bearer\s+)?[^\s"'&,}]+/ig,'$1$2***MASKED***').replace(/(cookie\s*[:=]\s*["']?)[^\n]+/ig,'$1***MASKED***').replace(/((access_|refresh_)?token\s*[:=]\s*["']?)[^\s"'&,}]+/ig,'$1***MASKED***').replace(/(password\s*[:=]\s*["']?)[^\s"'&,}]+/ig,'$1***MASKED***');}
-  function BT(b){try{if(!b)return'';if(typeof b==='string')return b;if(b instanceof URLSearchParams)return b.toString();if(b instanceof FormData){let a=[];b.forEach((v,k)=>a.push(k+'='+(v instanceof File?'[File:'+v.name+']':v)));return a.join('&')}if(b instanceof Blob)return'[Blob '+b.type+' '+b.size+' bytes]';if(b instanceof ArrayBuffer)return'[ArrayBuffer '+b.byteLength+' bytes]';return JSON.stringify(b)}catch(e){return'[unreadable body]'}}
-  function HO(h){let o={};try{if(!h)return o;if(h.forEach)h.forEach((v,k)=>o[k]=v);else if(Array.isArray(h))h.forEach(x=>o[x[0]]=x[1]);else Object.keys(h).forEach(k=>o[k]=h[k]);}catch(e){}return o;}
-  function HSTR(o){return Object.keys(o||{}).map(k=>k+': '+o[k]).join('\n');}
-  function parseXHRHeaders(s){let o={};String(s||'').trim().split(/[\r\n]+/).forEach(l=>{let i=l.indexOf(':');if(i>0)o[l.slice(0,i).trim()]=l.slice(i+1).trim()});return o;}
-  function copy(t){try{navigator.clipboard.writeText(t);toast('Copied')}catch(e){console.log(t);toast('Copy gagal, lihat console')}}
-  function toast(t){let x=D.getElementById('__np_toast');if(!x){x=D.createElement('div');x.id='__np_toast';x.style.cssText=CSS+'position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:2147483647;background:#111;border:1px solid #555;border-radius:999px;padding:8px 14px;font-size:12px;';D.body.appendChild(x)}x.textContent=t;x.style.display='block';setTimeout(()=>x.style.display='none',1200)}
-  function mk(tag,css,html){let el=D.createElement(tag);el.style.cssText=CSS+css;if(html!=null)el.innerHTML=html;return el;}
-  const btn=mk('button','position:fixed;right:10px;bottom:12px;z-index:2147483647;width:50px;height:50px;border-radius:999px;border:1px solid #6b7280;background:#111827;color:#fff;font:700 13px Arial;box-shadow:0 8px 24px #0008;','NET');
-  const panel=mk('div','display:none;position:fixed;left:4px;right:4px;bottom:68px;height:72vh;z-index:2147483646;background:#0b1220;border:1px solid #334155;border-radius:12px;box-shadow:0 10px 35px #000a;overflow:hidden;');
-  panel.innerHTML=`<div style="display:flex;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #263244;background:#111827"><b style="flex:1;color:#fff;font:700 13px Arial">Network Pro</b><button id="np_rec">REC</button><button id="np_all">All</button><button id="np_fx">Fetch</button><button id="np_xhr">XHR</button><button id="np_err">Err</button><button id="np_clear">Clear</button><button id="np_close">×</button></div><div style="display:flex;gap:6px;padding:6px;border-bottom:1px solid #263244"><input id="np_q" placeholder="filter url/status/method" style="flex:1;background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:8px;font:12px Arial"></div><div id="np_body" style="display:grid;grid-template-columns:44% 56%;height:calc(72vh - 92px)"><div id="np_list" style="overflow:auto;border-right:1px solid #263244"></div><div id="np_detail" style="overflow:auto"></div></div>`;
-  D.documentElement.appendChild(btn);D.documentElement.appendChild(panel);
-  function activeBtns(){['all','fx','xhr','err'].forEach(x=>{let b=D.getElementById('np_'+x);if(b)b.style.background=(ST.filter===x?'#2563eb':'#1f2937')});let r=D.getElementById('np_rec');if(r)r.style.background=ST.rec?'#dc2626':'#374151'}
-  function item(l){let ok=String(l.status).startsWith('2')||String(l.status).startsWith('3');return `<div data-id="${l.id}" style="padding:8px;border-bottom:1px solid #1f2a3a;${ST.sel===l.id?'background:#1d4ed8':'background:#0b1220'}"><div style="display:flex;gap:5px"><b style="color:${ok?'#86efac':'#fca5a5'}">${E(l.status)}</b><span>${E(l.method)}</span><span style="margin-left:auto;color:#94a3b8">${E(l.ms)}ms</span></div><div style="word-break:break-all;color:#93c5fd;font-size:11px">${E(l.url)}</div><div style="color:#94a3b8;font-size:11px">${E(l.type)} • ${E(l.time)} • ${E(l.size)}b</div></div>`}
-  function match(l){let q=ST.q.toLowerCase();let f=ST.filter;if(f==='fx'&&l.type!=='fetch')return false;if(f==='xhr'&&l.type!=='xhr')return false;if(f==='err'&&!(String(l.status).startsWith('4')||String(l.status).startsWith('5')||String(l.status)==='ERR'))return false;if(!q)return true;return (l.url+' '+l.method+' '+l.status+' '+l.type).toLowerCase().includes(q)}
-  function render(){activeBtns();let list=D.getElementById('np_list'),det=D.getElementById('np_detail');if(!list||!det)return;let arr=ST.logs.filter(match).slice().reverse();list.innerHTML=arr.map(item).join('')||'<div style="padding:10px;color:#94a3b8">Belum ada request. Klik fitur web setelah REC aktif.</div>';list.querySelectorAll('[data-id]').forEach(n=>n.onclick=()=>{ST.sel=+n.dataset.id;render()});let l=ST.logs.find(x=>x.id===ST.sel)||arr[0];if(l){ST.sel=l.id;det.innerHTML=detail(l)}else det.innerHTML='<div style="padding:12px;color:#94a3b8">Pilih request untuk lihat Headers / Payload / Response.</div>'}
-  function detail(l){let raw=JSON.stringify(l,null,2);let curl=`curl -X ${l.method} '${l.url}'`+Object.keys(l.reqHeaders||{}).map(k=>` \\\n  -H '${k}: ${String(l.reqHeaders[k]).replace(/'/g,"'\\''")}'`).join('')+(l.payload?` \\\n  --data '${String(l.payload).replace(/'/g,"'\\''")}'`:'');return `<div style="padding:9px"><div style="display:flex;gap:6px;flex-wrap:wrap"><button id="np_cp_raw">Copy Raw</button><button id="np_cp_res">Copy Response</button><button id="np_cp_pay">Copy Payload</button><button id="np_cp_curl">Copy cURL</button></div><h3 style="font:700 14px Arial;color:#fff;margin:10px 0 6px">General</h3><pre>${E(M(`URL: ${l.url}\nMethod: ${l.method}\nStatus: ${l.status}\nType: ${l.type}\nDuration: ${l.ms}ms\nTime: ${l.time}\nSize: ${l.size} bytes`))}</pre><details open><summary>Request Headers</summary><pre>${E(M(HSTR(l.reqHeaders)||'(empty/cannot read)'))}</pre></details><details open><summary>Response Headers</summary><pre>${E(M(HSTR(l.resHeaders)||'(empty/cannot read)'))}</pre></details><details open><summary>Payload / Request Body</summary><pre>${E(M(l.payload||'(empty)'))}</pre></details><details open><summary>Response</summary><pre>${E(M(P(l.response||'')))}</pre></details><details><summary>Raw JSON</summary><pre>${E(M(raw))}</pre></details></div>`}
-  panel.addEventListener('click',e=>{let l=ST.logs.find(x=>x.id===ST.sel);if(!l)return;if(e.target.id==='np_cp_raw')copy(M(JSON.stringify(l,null,2)));if(e.target.id==='np_cp_res')copy(M(l.response||''));if(e.target.id==='np_cp_pay')copy(M(l.payload||''));if(e.target.id==='np_cp_curl'){let curl=`curl -X ${l.method} '${l.url}'`+Object.keys(l.reqHeaders||{}).map(k=>` \\\n  -H '${k}: ${String(l.reqHeaders[k]).replace(/'/g,"'\\''")}'`).join('')+(l.payload?` \\\n  --data '${String(l.payload).replace(/'/g,"'\\''")}'`:'');copy(M(curl))}});
-  D.getElementById('np_rec').onclick=()=>{ST.rec=!ST.rec;render()};D.getElementById('np_clear').onclick=()=>{ST.logs=[];ST.sel=null;render()};D.getElementById('np_close').onclick=()=>panel.style.display='none';D.getElementById('np_q').oninput=e=>{ST.q=e.target.value;render()};D.getElementById('np_all').onclick=()=>{ST.filter='all';render()};D.getElementById('np_fx').onclick=()=>{ST.filter='fx';render()};D.getElementById('np_xhr').onclick=()=>{ST.filter='xhr';render()};D.getElementById('np_err').onclick=()=>{ST.filter='err';render()};btn.onclick=()=>{panel.style.display=panel.style.display==='none'?'block':'none';render()};
-  function add(l){if(!ST.rec)return;l.id=++ST.seq;l.time=new Date().toLocaleTimeString();l.size=String(l.response||'').length;ST.logs.push(l);W.__API_LOGS__=ST.logs;ST.sel=l.id;console.groupCollapsed('🌐 '+l.type+' '+l.method+' '+l.status+' '+l.url);console.log(l);console.groupEnd();render();}
-  const OF=W.fetch;if(OF&&!OF.__np){W.fetch=async function(input,init={}){let st=performance.now(),url='',method='GET',payload='',reqHeaders={};try{if(input instanceof Request){url=input.url;method=input.method;reqHeaders=HO(input.headers)}else url=String(input);if(init&&init.method)method=init.method;if(init&&init.headers)reqHeaders={...reqHeaders,...HO(init.headers)};if(init&&init.body)payload=BT(init.body)}catch(e){}try{let r=await OF.apply(this,arguments),txt='';try{txt=C(await r.clone().text())}catch(e){txt='[unreadable response: '+e.message+']'}add({type:'fetch',url,method,status:r.status,ms:Math.round(performance.now()-st),reqHeaders,resHeaders:HO(r.headers),payload,response:txt});return r}catch(e){add({type:'fetch',url,method,status:'ERR',ms:Math.round(performance.now()-st),reqHeaders,resHeaders:{},payload,response:String(e)});throw e}};W.fetch.__np=1}
-  const XO=XMLHttpRequest.prototype.open,XS=XMLHttpRequest.prototype.send,XH=XMLHttpRequest.prototype.setRequestHeader;if(!XMLHttpRequest.prototype.__np){XMLHttpRequest.prototype.open=function(m,u){this.__np_m=m;this.__np_u=u;this.__np_h={};return XO.apply(this,arguments)};XMLHttpRequest.prototype.setRequestHeader=function(k,v){this.__np_h=this.__np_h||{};this.__np_h[k]=v;return XH.apply(this,arguments)};XMLHttpRequest.prototype.send=function(b){let x=this,st=performance.now(),payload=BT(b);x.addEventListener('loadend',()=>{let tx='';try{tx=C(x.responseText)}catch(e){tx='[unreadable xhr response]'}add({type:'xhr',url:x.__np_u,method:x.__np_m,status:x.status,ms:Math.round(performance.now()-st),reqHeaders:x.__np_h||{},resHeaders:parseXHRHeaders(x.getAllResponseHeaders()),payload,response:tx})});return XS.apply(this,arguments)};XMLHttpRequest.prototype.__np=1}
-  W.__NETPRO__={toggle:()=>btn.click(),open:()=>{panel.style.display='block';render()},state:ST};
-  panel.style.display='block';render();toast('Network Pro aktif');
+(() => {
+  if (window.__NETPRO__) {
+    window.__NETPRO__.toggle();
+    return;
+  }
+
+  const D = document;
+  const W = window;
+
+  const ST = {
+    logs: [],
+    selectedId: null,
+    recording: true,
+    filter: "all",
+    query: "",
+    seq: 0,
+  };
+
+  const BASE_CSS =
+    "all:initial;box-sizing:border-box;font-family:Arial,sans-serif;color:#e9eef5;";
+
+  function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[char];
+    });
+  }
+
+  function truncateText(value, max = 60000) {
+    const text = String(value ?? "");
+    if (text.length <= max) return text;
+    return text.slice(0, max) + "\n...[TRUNCATED " + (text.length - max) + " chars]";
+  }
+
+  function prettyJSON(value) {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value ?? "";
+    }
+  }
+
+  function maskSensitive(value) {
+    return String(value ?? "")
+      .replace(
+        /(authorization\s*[:=]\s*["']?)(bearer\s+)?[^\s"'&,}]+/gi,
+        "$1$2***MASKED***"
+      )
+      .replace(/(cookie\s*[:=]\s*["']?)[^\n]+/gi, "$1***MASKED***")
+      .replace(
+        /((access_|refresh_)?token\s*[:=]\s*["']?)[^\s"'&,}]+/gi,
+        "$1***MASKED***"
+      )
+      .replace(/(password\s*[:=]\s*["']?)[^\s"'&,}]+/gi, "$1***MASKED***");
+  }
+
+  function bodyToText(body) {
+    try {
+      if (!body) return "";
+
+      if (typeof body === "string") return body;
+
+      if (body instanceof URLSearchParams) {
+        return body.toString();
+      }
+
+      if (body instanceof FormData) {
+        const arr = [];
+        body.forEach((value, key) => {
+          if (value instanceof File) {
+            arr.push(key + "=[File:" + value.name + "]");
+          } else {
+            arr.push(key + "=" + value);
+          }
+        });
+        return arr.join("&");
+      }
+
+      if (body instanceof Blob) {
+        return "[Blob " + body.type + " " + body.size + " bytes]";
+      }
+
+      if (body instanceof ArrayBuffer) {
+        return "[ArrayBuffer " + body.byteLength + " bytes]";
+      }
+
+      return JSON.stringify(body);
+    } catch {
+      return "[unreadable body]";
+    }
+  }
+
+  function headersToObject(headers) {
+    const output = {};
+
+    try {
+      if (!headers) return output;
+
+      if (headers.forEach) {
+        headers.forEach((value, key) => {
+          output[key] = value;
+        });
+      } else if (Array.isArray(headers)) {
+        headers.forEach((item) => {
+          output[item[0]] = item[1];
+        });
+      } else {
+        Object.keys(headers).forEach((key) => {
+          output[key] = headers[key];
+        });
+      }
+    } catch {}
+
+    return output;
+  }
+
+  function headersToString(headers) {
+    return Object.keys(headers || {})
+      .map((key) => key + ": " + headers[key])
+      .join("\n");
+  }
+
+  function parseXHRHeaders(rawHeaders) {
+    const output = {};
+
+    String(rawHeaders || "")
+      .trim()
+      .split(/[\r\n]+/)
+      .forEach((line) => {
+        const index = line.indexOf(":");
+        if (index > 0) {
+          output[line.slice(0, index).trim()] = line.slice(index + 1).trim();
+        }
+      });
+
+    return output;
+  }
+
+  function copyText(text) {
+    try {
+      navigator.clipboard.writeText(text);
+      showToast("Copied");
+    } catch {
+      console.log(text);
+      showToast("Copy gagal, lihat console");
+    }
+  }
+
+  function showToast(text) {
+    let toast = D.getElementById("__np_toast");
+
+    if (!toast) {
+      toast = D.createElement("div");
+      toast.id = "__np_toast";
+      toast.style.cssText =
+        BASE_CSS +
+        "position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:2147483647;background:#111;border:1px solid #555;border-radius:999px;padding:8px 14px;font-size:12px;";
+      D.body.appendChild(toast);
+    }
+
+    toast.textContent = text;
+    toast.style.display = "block";
+
+    setTimeout(() => {
+      toast.style.display = "none";
+    }, 1200);
+  }
+
+  function createElement(tag, css, html) {
+    const element = D.createElement(tag);
+    element.style.cssText = BASE_CSS + css;
+
+    if (html != null) {
+      element.innerHTML = html;
+    }
+
+    return element;
+  }
+
+  const button = createElement(
+    "button",
+    "position:fixed;right:10px;bottom:12px;z-index:2147483647;width:50px;height:50px;border-radius:999px;border:1px solid #6b7280;background:#111827;color:#fff;font:700 13px Arial;box-shadow:0 8px 24px #0008;",
+    "NET"
+  );
+
+  const panel = createElement(
+    "div",
+    "display:none;position:fixed;left:4px;right:4px;bottom:68px;height:72vh;z-index:2147483646;background:#0b1220;border:1px solid #334155;border-radius:12px;box-shadow:0 10px 35px #000a;overflow:hidden;"
+  );
+
+  panel.innerHTML = `
+    <div style="display:flex;gap:6px;align-items:center;padding:7px;border-bottom:1px solid #263244;background:#111827">
+      <b style="flex:1;color:#fff;font:700 13px Arial">Network Pro</b>
+      <button id="np_rec">REC</button>
+      <button id="np_all">All</button>
+      <button id="np_fx">Fetch</button>
+      <button id="np_xhr">XHR</button>
+      <button id="np_err">Err</button>
+      <button id="np_clear">Clear</button>
+      <button id="np_close">×</button>
+    </div>
+
+    <div style="display:flex;gap:6px;padding:6px;border-bottom:1px solid #263244">
+      <input id="np_q" placeholder="filter url/status/method" style="flex:1;background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:8px;font:12px Arial">
+    </div>
+
+    <div id="np_body" style="display:grid;grid-template-columns:44% 56%;height:calc(72vh - 92px)">
+      <div id="np_list" style="overflow:auto;border-right:1px solid #263244"></div>
+      <div id="np_detail" style="overflow:auto"></div>
+    </div>
+  `;
+
+  D.documentElement.appendChild(button);
+  D.documentElement.appendChild(panel);
+
+  function updateButtonStyle() {
+    ["all", "fx", "xhr", "err"].forEach((name) => {
+      const btn = D.getElementById("np_" + name);
+      if (!btn) return;
+
+      btn.style.background = ST.filter === name ? "#2563eb" : "#1f2937";
+      btn.style.color = "#fff";
+      btn.style.border = "1px solid #475569";
+      btn.style.borderRadius = "6px";
+      btn.style.padding = "5px 7px";
+      btn.style.font = "12px Arial";
+    });
+
+    const rec = D.getElementById("np_rec");
+    if (rec) {
+      rec.style.background = ST.recording ? "#dc2626" : "#374151";
+      rec.style.color = "#fff";
+      rec.style.border = "1px solid #475569";
+      rec.style.borderRadius = "6px";
+      rec.style.padding = "5px 7px";
+      rec.style.font = "12px Arial";
+    }
+  }
+
+  function createListItem(log) {
+    const isOK =
+      String(log.status).startsWith("2") || String(log.status).startsWith("3");
+
+    return `
+      <div data-id="${log.id}" style="padding:8px;border-bottom:1px solid #1f2a3a;${ST.selectedId === log.id ? "background:#1d4ed8" : "background:#0b1220"}">
+        <div style="display:flex;gap:5px">
+          <b style="color:${isOK ? "#86efac" : "#fca5a5"}">${escapeHTML(log.status)}</b>
+          <span>${escapeHTML(log.method)}</span>
+          <span style="margin-left:auto;color:#94a3b8">${escapeHTML(log.ms)}ms</span>
+        </div>
+        <div style="word-break:break-all;color:#93c5fd;font-size:11px">${escapeHTML(log.url)}</div>
+        <div style="color:#94a3b8;font-size:11px">${escapeHTML(log.type)} • ${escapeHTML(log.time)} • ${escapeHTML(log.size)}b</div>
+      </div>
+    `;
+  }
+
+  function isMatch(log) {
+    const query = ST.query.toLowerCase();
+    const filter = ST.filter;
+
+    if (filter === "fx" && log.type !== "fetch") return false;
+    if (filter === "xhr" && log.type !== "xhr") return false;
+
+    if (
+      filter === "err" &&
+      !(
+        String(log.status).startsWith("4") ||
+        String(log.status).startsWith("5") ||
+        String(log.status) === "ERR"
+      )
+    ) {
+      return false;
+    }
+
+    if (!query) return true;
+
+    return (
+      log.url +
+      " " +
+      log.method +
+      " " +
+      log.status +
+      " " +
+      log.type
+    )
+      .toLowerCase()
+      .includes(query);
+  }
+
+  function render() {
+    updateButtonStyle();
+
+    const list = D.getElementById("np_list");
+    const detail = D.getElementById("np_detail");
+
+    if (!list || !detail) return;
+
+    const filteredLogs = ST.logs.filter(isMatch).slice().reverse();
+
+    list.innerHTML =
+      filteredLogs.map(createListItem).join("") ||
+      '<div style="padding:10px;color:#94a3b8">Belum ada request. Klik fitur web setelah REC aktif.</div>';
+
+    list.querySelectorAll("[data-id]").forEach((node) => {
+      node.onclick = () => {
+        ST.selectedId = Number(node.dataset.id);
+        render();
+      };
+    });
+
+    const selectedLog =
+      ST.logs.find((item) => item.id === ST.selectedId) || filteredLogs[0];
+
+    if (selectedLog) {
+      ST.selectedId = selectedLog.id;
+      detail.innerHTML = createDetail(selectedLog);
+    } else {
+      detail.innerHTML =
+        '<div style="padding:12px;color:#94a3b8">Pilih request untuk lihat Headers / Payload / Response.</div>';
+    }
+  }
+
+  function createCurl(log) {
+    let curl = `curl -X ${log.method} '${log.url}'`;
+
+    Object.keys(log.reqHeaders || {}).forEach((key) => {
+      const value = String(log.reqHeaders[key]).replace(/'/g, "'\\''");
+      curl += ` \\\n  -H '${key}: ${value}'`;
+    });
+
+    if (log.payload) {
+      curl += ` \\\n  --data '${String(log.payload).replace(/'/g, "'\\''")}'`;
+    }
+
+    return curl;
+  }
+
+  function createDetail(log) {
+    const raw = JSON.stringify(log, null, 2);
+    const general = `URL: ${log.url}
+Method: ${log.method}
+Status: ${log.status}
+Type: ${log.type}
+Duration: ${log.ms}ms
+Time: ${log.time}
+Size: ${log.size} bytes`;
+
+    return `
+      <div style="padding:9px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button id="np_cp_raw">Copy Raw</button>
+          <button id="np_cp_res">Copy Response</button>
+          <button id="np_cp_pay">Copy Payload</button>
+          <button id="np_cp_curl">Copy cURL</button>
+        </div>
+
+        <h3 style="font:700 14px Arial;color:#fff;margin:10px 0 6px">General</h3>
+        <pre>${escapeHTML(maskSensitive(general))}</pre>
+
+        <details open>
+          <summary>Request Headers</summary>
+          <pre>${escapeHTML(maskSensitive(headersToString(log.reqHeaders) || "(empty/cannot read)"))}</pre>
+        </details>
+
+        <details open>
+          <summary>Response Headers</summary>
+          <pre>${escapeHTML(maskSensitive(headersToString(log.resHeaders) || "(empty/cannot read)"))}</pre>
+        </details>
+
+        <details open>
+          <summary>Payload / Request Body</summary>
+          <pre>${escapeHTML(maskSensitive(log.payload || "(empty)"))}</pre>
+        </details>
+
+        <details open>
+          <summary>Response</summary>
+          <pre>${escapeHTML(maskSensitive(prettyJSON(log.response || "")))}</pre>
+        </details>
+
+        <details>
+          <summary>Raw JSON</summary>
+          <pre>${escapeHTML(maskSensitive(raw))}</pre>
+        </details>
+      </div>
+    `;
+  }
+
+  panel.addEventListener("click", (event) => {
+    const log = ST.logs.find((item) => item.id === ST.selectedId);
+    if (!log) return;
+
+    if (event.target.id === "np_cp_raw") {
+      copyText(maskSensitive(JSON.stringify(log, null, 2)));
+    }
+
+    if (event.target.id === "np_cp_res") {
+      copyText(maskSensitive(log.response || ""));
+    }
+
+    if (event.target.id === "np_cp_pay") {
+      copyText(maskSensitive(log.payload || ""));
+    }
+
+    if (event.target.id === "np_cp_curl") {
+      copyText(maskSensitive(createCurl(log)));
+    }
+  });
+
+  D.getElementById("np_rec").onclick = () => {
+    ST.recording = !ST.recording;
+    render();
+  };
+
+  D.getElementById("np_clear").onclick = () => {
+    ST.logs = [];
+    ST.selectedId = null;
+    render();
+  };
+
+  D.getElementById("np_close").onclick = () => {
+    panel.style.display = "none";
+  };
+
+  D.getElementById("np_q").oninput = (event) => {
+    ST.query = event.target.value;
+    render();
+  };
+
+  D.getElementById("np_all").onclick = () => {
+    ST.filter = "all";
+    render();
+  };
+
+  D.getElementById("np_fx").onclick = () => {
+    ST.filter = "fx";
+    render();
+  };
+
+  D.getElementById("np_xhr").onclick = () => {
+    ST.filter = "xhr";
+    render();
+  };
+
+  D.getElementById("np_err").onclick = () => {
+    ST.filter = "err";
+    render();
+  };
+
+  button.onclick = () => {
+    panel.style.display = panel.style.display === "none" ? "block" : "none";
+    render();
+  };
+
+  function addLog(log) {
+    if (!ST.recording) return;
+
+    log.id = ++ST.seq;
+    log.time = new Date().toLocaleTimeString();
+    log.size = String(log.response || "").length;
+
+    ST.logs.push(log);
+    W.__API_LOGS__ = ST.logs;
+    ST.selectedId = log.id;
+
+    console.groupCollapsed(
+      "🌐 " + log.type + " " + log.method + " " + log.status + " " + log.url
+    );
+    console.log(log);
+    console.groupEnd();
+
+    render();
+  }
+
+  const originalFetch = W.fetch;
+
+  if (originalFetch && !originalFetch.__netpro_hooked) {
+    W.fetch = async function (input, init = {}) {
+      const startedAt = performance.now();
+
+      let url = "";
+      let method = "GET";
+      let payload = "";
+      let reqHeaders = {};
+
+      try {
+        if (input instanceof Request) {
+          url = input.url;
+          method = input.method;
+          reqHeaders = headersToObject(input.headers);
+        } else {
+          url = String(input);
+        }
+
+        if (init && init.method) method = init.method;
+
+        if (init && init.headers) {
+          reqHeaders = {
+            ...reqHeaders,
+            ...headersToObject(init.headers),
+          };
+        }
+
+        if (init && init.body) {
+          payload = bodyToText(init.body);
+        }
+      } catch {}
+
+      try {
+        const response = await originalFetch.apply(this, arguments);
+
+        let responseText = "";
+
+        try {
+          responseText = truncateText(await response.clone().text());
+        } catch (error) {
+          responseText = "[unreadable response: " + error.message + "]";
+        }
+
+        addLog({
+          type: "fetch",
+          url,
+          method,
+          status: response.status,
+          ms: Math.round(performance.now() - startedAt),
+          reqHeaders,
+          resHeaders: headersToObject(response.headers),
+          payload,
+          response: responseText,
+        });
+
+        return response;
+      } catch (error) {
+        addLog({
+          type: "fetch",
+          url,
+          method,
+          status: "ERR",
+          ms: Math.round(performance.now() - startedAt),
+          reqHeaders,
+          resHeaders: {},
+          payload,
+          response: String(error),
+        });
+
+        throw error;
+      }
+    };
+
+    W.fetch.__netpro_hooked = true;
+  }
+
+  const originalOpen = XMLHttpRequest.prototype.open;
+  const originalSend = XMLHttpRequest.prototype.send;
+  const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+  if (!XMLHttpRequest.prototype.__netpro_hooked) {
+    XMLHttpRequest.prototype.open = function (method, url) {
+      this.__np_method = method;
+      this.__np_url = url;
+      this.__np_headers = {};
+
+      return originalOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.setRequestHeader = function (key, value) {
+      this.__np_headers = this.__np_headers || {};
+      this.__np_headers[key] = value;
+
+      return originalSetRequestHeader.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function (body) {
+      const xhr = this;
+      const startedAt = performance.now();
+      const payload = bodyToText(body);
+
+      xhr.addEventListener("loadend", () => {
+        let responseText = "";
+
+        try {
+          responseText = truncateText(xhr.responseText);
+        } catch {
+          responseText = "[unreadable xhr response]";
+        }
+
+        addLog({
+          type: "xhr",
+          url: xhr.__np_url,
+          method: xhr.__np_method,
+          status: xhr.status,
+          ms: Math.round(performance.now() - startedAt),
+          reqHeaders: xhr.__np_headers || {},
+          resHeaders: parseXHRHeaders(xhr.getAllResponseHeaders()),
+          payload,
+          response: responseText,
+        });
+      });
+
+      return originalSend.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.__netpro_hooked = true;
+  }
+
+  W.__NETPRO__ = {
+    toggle: () => button.click(),
+    open: () => {
+      panel.style.display = "block";
+      render();
+    },
+    close: () => {
+      panel.style.display = "none";
+    },
+    state: ST,
+  };
+
+  panel.style.display = "block";
+  render();
+  showToast("Network Pro aktif");
 })();
